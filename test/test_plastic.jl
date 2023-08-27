@@ -47,3 +47,7 @@ end
     loading = get_Plastic_loading()
     check_jld2(m, loading, "Plastic1")#, debug_print=true, OVERWRITE_JLD2=true)
 end
+
+
+ε = get_Plastic_loading()
+ε_11 = [ε[step][1,1] for step in 1:12]
