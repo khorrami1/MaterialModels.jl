@@ -99,6 +99,7 @@ include("wrappers.jl")
 export initial_material_state, get_cache
 export material_response
 export elastic_strain_energy_density
+export elastic_tangent_3D
 
 export AbstractMaterial, AbstractMaterialState
 export LinearElastic, TransverselyIsotropic, Plastic, CrystalViscoPlastic
