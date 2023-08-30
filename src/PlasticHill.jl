@@ -33,6 +33,12 @@ PlasticHill(; YS, UTS, E, ν, R0, R45, R90, K, n) = PlasticHill(YS, UTS, E, ν, 
 plasticHill = PlasticHill(72.0, 121.0, 73100.0, 0.3, 0.65, 0.83, 0.6, 326.8, 0.226)
 
 
+struct PlasticHillState{dim,T, M} <: AbstractMaterialState
+    εᵖ::SymmetricTensor{2,dim,T,M}
+    λdot :: T
+    σY :: SymmetricTensor{2,dim,T,M}
+end
+
 struct Yield_Hill48{T}
     F::T
     G::T
@@ -53,6 +59,7 @@ stress_test = zero(SymmetricTensor{2,3})
 
 yield_func(stress_test)
 
-Tensors.gradient(yield_func, stress_test)
+df_dσ = Tensors.gradient(yield_func, stress_test)
 
 # ̇εₚ = ̇λ*∂f∂σ, where λ=̄εₚ (equivalnet plastic strain), Hardening Law: Y = K*εⁿ (yield stress!)
+# λ = sqrt(2/3*dev(εₚ)⊡dev(εₚ))
