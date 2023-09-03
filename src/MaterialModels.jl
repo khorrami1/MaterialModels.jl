@@ -84,6 +84,7 @@ include("traits.jl")
 include("LinearElastic.jl")
 include("transverselyisotropic.jl")
 include("Plastic.jl")
+include("PlasticHill.jl")
 include("CrystalViscoPlastic/slipsystems.jl")
 include("CrystalViscoPlastic/CrystalViscoPlastic.jl")
 
@@ -102,8 +103,8 @@ export elastic_strain_energy_density
 export elastic_tangent_3D
 
 export AbstractMaterial, AbstractMaterialState, AbstractCache
-export LinearElastic, TransverselyIsotropic, Plastic, CrystalViscoPlastic
-export LinearElasticState, TransverselyIsotropicState, PlasticState, CrystalViscoPlasticState
+export LinearElastic, TransverselyIsotropic, Plastic, CrystalViscoPlastic, PlasticHill
+export LinearElasticState, TransverselyIsotropicState, PlasticState, CrystalViscoPlasticState, PlasticHillState
 export AbstractDim, UniaxialStrain, UniaxialStress, PlaneStrain, PlaneStress
 
 export DeformationGradient, RightCauchyGreen, GreenLagrange, SmallStrain

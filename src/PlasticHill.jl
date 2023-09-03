@@ -15,6 +15,8 @@ struct PlasticHill<:AbstractMaterial
     G :: Float64
     H :: Float64
     N :: Float64
+    L :: Float64
+    M :: Float64
     Eᵉ :: SymmetricTensor{4,3,Float64,36}
 
     function PlasticHill(UTS, E, ν, R0, R45, R90)
@@ -22,8 +24,10 @@ struct PlasticHill<:AbstractMaterial
         G = 1/(1+R0)
         H = R0/(1+R0)
         N = (R0+R90)*(1+2*R45)/(2*R90*(1+R0))
+        L = N # must be checked!
+        M = N # must be checked!
         Eᵉ = elastic_tangent_3D(E, ν)
-        return new(UTS, E, ν, R0, R45, R90, F, G, H, N, Eᵉ)
+        return new(UTS, E, ν, R0, R45, R90, F, G, H, N, L, M, Eᵉ)
     end
 end
 
@@ -78,6 +82,11 @@ end
 
 yield_func = Yield_Hill48(plasticHill.F, plasticHill.G, plasticHill.H, plasticHill.N)
 
+function get_equivalent_Hill(T::SymmetricTensor{2,3}, m::PlasticHill)
+    return sqrt( (m.F*T[1,1]*T[1,1] + m.G*T[2,2]*T[2,2] + m.H*T[3,3]*T[3,3])/(m.F*m.G + m.F*m.H + m.G*m.H) + 2*T[2,3]*T[2,3]/m.L + 2*T[3,1]*T[3,1]/m.M + 2*T[1,2]*T[1,2]/m.N )
+end
+
+
 function Tensors.tomandel!(v::Vector{T}, r::ResidualsPlasticHill{T}) where T
     M=6
     # TODO check vector length
@@ -131,12 +140,12 @@ function material_response(m::PlasticHill, ε::SymmetricTensor{2,3,T,6}, state::
 end
 
 
-function residuals(vars::ResidualsPlasticHill, m::PlasticHill, material_state::PlasticStateHill, dε)
+function residuals(vars::ResidualsPlasticHill, m::PlasticHill, material_state::PlasticHillState, dε)
 
     df_dσ = Tensors.gradient(yield_func, vars.σ)
     dεᵖ = vars.λ * df_dσ 
     Rσ = vars.σ - material_state.σ + m.Eᵉ ⊡ (dεᵖ - dε)  
-    Rλ = vars.λ - get_equivalent(dεᵖ)
+    Rλ = vars.λ - get_equivalent_Hill(dεᵖ, m)
 
     return ResidualsPlasticHill(Rσ, Rλ)
 end
@@ -150,3 +159,21 @@ df_dσ = Tensors.gradient(yield_func, stress_test)
 # ̇εₚ = ̇λ*∂f∂σ, where λ=̄εₚ (equivalnet plastic strain), Hardening Law: Y = K*εⁿ (yield stress!)
 # λ = sqrt(2/3*dev(εₚ)⊡dev(εₚ))
 
+
+function get_Plastic_loading()
+    strain1 = range(0.0,  0.005, length=5)
+    strain2 = range(0.005, 0.001, length=5)
+    strain3 = range(0.001, 0.007, length=5)
+
+    _C = [strain1[2:end]..., strain2[2:end]..., strain3[2:end]...]
+    ε = [SymmetricTensor{2,3}((x, x/10, 0.0, 0.0, 0.0, 0.0)) for x in _C]
+
+    return ε
+end  
+
+@testset "PlasticHill jld2" begin
+    m = plasticHill = PlasticHill(243.0, 69000.0, 0.33, 0.84, 0.64, 1.51)
+    
+    loading = get_Plastic_loading()
+    check_jld2(m, loading, "Plastic1")#, debug_print=true, OVERWRITE_JLD2=true)
+end
