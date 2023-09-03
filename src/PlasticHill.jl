@@ -133,10 +133,12 @@ end
 
 function residuals(vars::ResidualsPlasticHill, m::PlasticHill, material_state::PlasticStateHill, dε)
 
-    Rσ = vars.σ - material_state.
-    yield_func()
+    df_dσ = Tensors.gradient(yield_func, vars.σ)
+    dεᵖ = vars.λ * df_dσ 
+    Rσ = vars.σ - material_state.σ + m.Eᵉ ⊡ (dεᵖ - dε)  
+    Rλ = vars.λ - get_equivalent(dεᵖ)
 
-    return ResidualsPlastic(Rσ, Rκ, Rα, Rμ)
+    return ResidualsPlasticHill(Rσ, Rλ)
 end
 
 stress_test = zero(SymmetricTensor{2,3})
