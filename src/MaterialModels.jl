@@ -103,8 +103,8 @@ export elastic_strain_energy_density
 export elastic_tangent_3D
 
 export AbstractMaterial, AbstractMaterialState, AbstractCache
-export LinearElastic, TransverselyIsotropic, Plastic, CrystalViscoPlastic, PlasticHill
-export LinearElasticState, TransverselyIsotropicState, PlasticState, CrystalViscoPlasticState, PlasticHillState
+export LinearElastic, TransverselyIsotropic, Plastic, CrystalViscoPlastic
+export LinearElasticState, TransverselyIsotropicState, PlasticState, CrystalViscoPlasticState
 export AbstractDim, UniaxialStrain, UniaxialStress, PlaneStrain, PlaneStress
 
 export DeformationGradient, RightCauchyGreen, GreenLagrange, SmallStrain
@@ -115,5 +115,7 @@ export xu_needleman_Φₙ, xu_needleman_Φₜ, xu_needleman_σₘₐₓ, xu_need
 export XuNeedlemanState
 
 export solve
+
+export PlasticHill, PlasticHillState
 
 end
