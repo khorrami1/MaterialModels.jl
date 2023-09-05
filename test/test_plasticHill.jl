@@ -42,7 +42,7 @@ function uniaxialTest(loadingRange)
     return e11_all, s11_all
 end
 
-e11_all, s11_all = uniaxialTest(range(0.0, 0.05, 21))
+e11_all, s11_all = uniaxialTest(range(0.0, 0.2, 2001))
 
 using Plots
 

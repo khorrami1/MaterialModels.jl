@@ -56,21 +56,24 @@ PlasticHill(;UTS, E, ν, R0, R45, R90, yieldStress) = PlasticHill(UTS, E, ν, R0
 struct PlasticHillState{dim,T, M} <: AbstractMaterialState
     εᵖ::SymmetricTensor{2,dim,T,M}
     σ :: SymmetricTensor{2,dim,T,M}
-    λ :: T # if associative follow rule, then Equivalent plastic strain = plastic multiplier 
+    κ :: T # if associative follow rule, then Equivalent plastic strain = plastic multiplier 
 end
 
-Base.zero(::Type{PlasticHillState{dim,T,M}}) where {dim,T,M} = PlasticHillState(zero(SymmetricTensor{2,dim,T,M}), zero(SymmetricTensor{2,dim,T,M}), 0.)
-initial_material_state(::PlasticHill) = zero(PlasticHillState{3,Float64, 6})
+# Base.zero(::Type{PlasticHillState{dim,T,M}}) where {dim,T,M} = PlasticHillState(zero(SymmetricTensor{2,dim,T,M}), zero(SymmetricTensor{2,dim,T,M}), 0.)
+# initial_material_state(::PlasticHill) = zero(PlasticHillState{3,Float64, 6})
+
+initial_material_state(m::PlasticHill) = PlasticHillState(zero(SymmetricTensor{2,3}), zero(SymmetricTensor{2,3}), m.yieldStress(0.0))
 
 struct PlasticHillCache{T<:NLsolve.OnceDifferentiable} <: AbstractCache
     nlsolve_cache::T
 end
 
-get_n_scalar_equations(::PlasticHill) = 7
+get_n_scalar_equations(::PlasticHill) = 8
 
 struct ResidualsPlasticHill{T}
     σ::SymmetricTensor{2,3,T,6}
-    λ::T
+    κ::T
+    dλ::T 
 end
 
 Tensors.get_base(::Type{PlasticHill}) = ResidualsPlasticHill # needed for frommandel
@@ -92,34 +95,37 @@ function Tensors.tomandel!(v::Vector{T}, r::ResidualsPlasticHill{T}) where T
     M=6
     # TODO check vector length
     tomandel!(view(v, 1:M), r.σ)
-    v[M+1] = r.λ
+    v[M+1] = r.κ
+    v[M+2] = r.dλ
     return v
 end
 
 function Tensors.frommandel(::Type{ResidualsPlasticHill}, v::Vector{T}) where T
     σ = frommandel(SymmetricTensor{2,3}, view(v, 1:6))
-    λ = v[7]
-    return ResidualsPlasticHill{T}(σ, λ)
+    κ = v[7]
+    dλ = v[8]
+    return ResidualsPlasticHill{T}(σ, κ, dλ)
 end
 
-function material_response(m::PlasticHill, ε::SymmetricTensor{2,3,T,6}, state::PlasticHillState{3},
+function material_response(m::PlasticHill, dε::SymmetricTensor{2,3,T,6}, state::PlasticHillState{3},
     Δt=nothing; cache=get_cache(m), options::Dict{Symbol, Any} = Dict{Symbol, Any}()) where T
 
     nlsolve_cache = cache.nlsolve_cache
 
-    σ_trial = m.Eᵉ ⊡ (ε - state.εᵖ)
+    σ_trial = state.σ + m.Eᵉ ⊡ dε
 
-    Φ = m.yieldFunction(σ_trial) - m.yieldStress(state.λ)
+    # εᵖ_equi = get_equivalent_Hill(state.εᵖ, m)
+    Φ = m.yieldFunction(σ_trial) - m.yieldStress(state.κ)
 
     if Φ <= 0
-        return σ_trial, m.Eᵉ, state
+        return σ_trial, m.Eᵉ, PlasticHillState(state.εᵖ, σ_trial, state.κ)
     else
         # set the current residual function that depends only on the variables
         # nlsolve_cache.f = (r_vector, x_vector) -> vector_residual!(((x)->residuals(x,m,state,Δε)), r_vector, x_vector, m)
-        f(r_vector, x_vector) = vector_residual!(((x)->residuals(x,m,state,ε)), r_vector, x_vector, m)
+        f(r_vector, x_vector) = vector_residual!(((x)->residuals(x,m,state,dε)), r_vector, x_vector, m)
         update_cache!(nlsolve_cache, f)
         # initial guess
-        x0 = ResidualsPlasticHill(σ_trial,state.λ)
+        x0 = ResidualsPlasticHill(σ_trial, state.κ, 0.0)
         # convert initial guess to vector
         tomandel!(nlsolve_cache.x_f, x0)
         # solve for variables x
@@ -129,9 +135,9 @@ function material_response(m::PlasticHill, ε::SymmetricTensor{2,3,T,6}, state::
         
         if result.f_converged
             x = frommandel(ResidualsPlasticHill, result.zero::Vector{T})
-            εᵖ = state.εᵖ + (x.λ - state.λ)*Tensors.gradient(m.yieldFunction, x.σ)
+            εᵖ = state.εᵖ + x.dλ*Tensors.gradient(m.yieldFunction, x.σ)
             Cep = m.Eᵉ # it must be corrected later!
-            return x.σ, Cep, PlasticHillState(εᵖ, x.σ, x.λ)
+            return x.σ, Cep, PlasticHillState(εᵖ, x.σ, x.κ)
         else
             error("Material model not converged. Could not find material state.")
         end
@@ -141,12 +147,15 @@ function material_response(m::PlasticHill, ε::SymmetricTensor{2,3,T,6}, state::
 end
 
 
-function residuals(vars::ResidualsPlasticHill, m::PlasticHill, material_state::PlasticHillState, dε)
+function residuals(vars::ResidualsPlasticHill, m::PlasticHill, state::PlasticHillState, dε)
 
     df_dσ = Tensors.gradient(m.yieldFunction, vars.σ)
-    dεᵖ = vars.λ * df_dσ 
-    Rσ = vars.σ - material_state.σ + m.Eᵉ ⊡ (dεᵖ - dε)  
-    Rλ = vars.λ - get_equivalent_Hill(dεᵖ, m)
+    dεᵖ = vars.dλ * df_dσ 
+    # εᵖ = state.εᵖ + dεᵖ
+    Rσ = vars.σ - state.σ + m.Eᵉ ⊡ (dεᵖ - dε)
+    Rκ = vars.κ - state.κ - vars.dλ
+    # εᵖ_equi = get_equivalent_Hill(εᵖ, m)
+    RΦ = m.yieldFunction(vars.σ) - m.yieldStress(vars.κ)
 
-    return ResidualsPlasticHill(Rσ, Rλ)
+    return ResidualsPlasticHill(Rσ, Rκ, RΦ)
 end
