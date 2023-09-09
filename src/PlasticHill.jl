@@ -6,12 +6,18 @@ struct Yield_Hill48{T}
     F::T
     G::T
     H::T
+    M::T
     N::T
+    L::T
 end 
 
-function (f::Yield_Hill48)(σ::SymmetricTensor{2,3})
-    return sqrt(1.5*( f.H*(σ[1,1]-σ[2,2])*(σ[1,1]-σ[2,2]) + f.F*(σ[2,2]-σ[3,3])*(σ[2,2]-σ[3,3]) + f.G*(σ[3,3]-σ[1,1])*(σ[3,3]-σ[1,1]) + 2*f.N*( σ[1,2]*σ[1,2] + σ[2,3]*σ[2,3] + σ[1,3]*σ[1,3] ) )/(f.F+f.G+f.H))
-end 
+# function (f::Yield_Hill48)(σ::SymmetricTensor{2,3})
+#     return sqrt(1.5*( f.H*(σ[1,1]-σ[2,2])*(σ[1,1]-σ[2,2]) + f.F*(σ[2,2]-σ[3,3])*(σ[2,2]-σ[3,3]) + f.G*(σ[3,3]-σ[1,1])*(σ[3,3]-σ[1,1]) + 2*f.N*( σ[1,2]*σ[1,2] + σ[2,3]*σ[2,3] + σ[1,3]*σ[1,3] ) )/(f.F+f.G+f.H))
+# end 
+
+function (f::Yield_Hill48)(T::SymmetricTensor{2,3})
+    return sqrt( (f.F*T[1,1]*T[1,1] + f.G*T[2,2]*T[2,2] + f.H*T[3,3]*T[3,3])/(f.F*f.G + f.F*f.H + f.G*f.H) + 2*T[2,3]*T[2,3]/f.L + 2*T[3,1]*T[3,1]/f.M + 2*T[1,2]*T[1,2]/f.N )
+end
 
 struct PlasticHill<:AbstractMaterial
     UTS :: Float64 #Ultimate Tensile strength (MPa)
@@ -39,7 +45,7 @@ struct PlasticHill<:AbstractMaterial
         N = (R0+R90)*(1+2*R45)/(2*R90*(1+R0))
         L = N # must be checked!
         M = N # must be checked!
-        yieldFunction = Yield_Hill48(F, G, H, N)
+        yieldFunction = Yield_Hill48(F, G, H, M, N, L)
         Eᵉ = elastic_tangent_3D(E, ν)
         return new(UTS, E, ν, R0, R45, R90, yieldStress, yieldFunction, F, G, H, N, L, M, Eᵉ)
     end
@@ -55,6 +61,7 @@ PlasticHill(;UTS, E, ν, R0, R45, R90, yieldStress) = PlasticHill(UTS, E, ν, R0
 
 struct PlasticHillState{dim,T, M} <: AbstractMaterialState
     εᵖ::SymmetricTensor{2,dim,T,M}
+    εᵉ::SymmetricTensor{2,dim,T,M}
     σ :: SymmetricTensor{2,dim,T,M}
     κ :: T # if associative follow rule, then Equivalent plastic strain = plastic multiplier 
 end
@@ -62,7 +69,7 @@ end
 # Base.zero(::Type{PlasticHillState{dim,T,M}}) where {dim,T,M} = PlasticHillState(zero(SymmetricTensor{2,dim,T,M}), zero(SymmetricTensor{2,dim,T,M}), 0.)
 # initial_material_state(::PlasticHill) = zero(PlasticHillState{3,Float64, 6})
 
-initial_material_state(m::PlasticHill) = PlasticHillState(zero(SymmetricTensor{2,3}), zero(SymmetricTensor{2,3}), m.yieldStress(0.0))
+initial_material_state(m::PlasticHill) = PlasticHillState(zero(SymmetricTensor{2,3}), zero(SymmetricTensor{2,3}), zero(SymmetricTensor{2,3}), 0.0)
 
 struct PlasticHillCache{T<:NLsolve.OnceDifferentiable} <: AbstractCache
     nlsolve_cache::T
@@ -118,7 +125,7 @@ function material_response(m::PlasticHill, dε::SymmetricTensor{2,3,T,6}, state:
     Φ = m.yieldFunction(σ_trial) - m.yieldStress(state.κ)
 
     if Φ <= 0
-        return σ_trial, m.Eᵉ, PlasticHillState(state.εᵖ, σ_trial, state.κ)
+        return σ_trial, m.Eᵉ, PlasticHillState(state.εᵖ, state.εᵉ+dε, σ_trial, state.κ)
     else
         # set the current residual function that depends only on the variables
         # nlsolve_cache.f = (r_vector, x_vector) -> vector_residual!(((x)->residuals(x,m,state,Δε)), r_vector, x_vector, m)
@@ -135,9 +142,11 @@ function material_response(m::PlasticHill, dε::SymmetricTensor{2,3,T,6}, state:
         
         if result.f_converged
             x = frommandel(ResidualsPlasticHill, result.zero::Vector{T})
-            εᵖ = state.εᵖ + x.dλ*Tensors.gradient(m.yieldFunction, x.σ)
+            dεᵖ = x.dλ*Tensors.gradient(m.yieldFunction, x.σ)
+            dεᵉ = dε - dεᵖ
+            εᵖ = state.εᵖ + dεᵖ
             Cep = m.Eᵉ # it must be corrected later!
-            return x.σ, Cep, PlasticHillState(εᵖ, x.σ, x.κ)
+            return x.σ, Cep, PlasticHillState(εᵖ, state.εᵉ+dεᵉ, x.σ, x.κ)
         else
             error("Material model not converged. Could not find material state.")
         end

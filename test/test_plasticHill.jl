@@ -24,9 +24,19 @@ initial_yield_stress = m.yieldStress(0.0)
 Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? 5 * ε11_yield : 0.0)
 σ, ∂σ∂ε, temp_state = material_response(m, Δε, state; cache=cache)
 
+# =========================================================
+state = initial_material_state(m)
+Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? 1 * ε11_yield : 0.0)
+σ, ∂σ∂ε, state = material_response(m, Δε, state; cache=cache)
 
-function uniaxialTest(loadingRange)
+Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? 1 * ε11_yield : 0.0)
+σ, ∂σ∂ε, state = material_response(m, Δε, state; cache=cache)
+
+
+
+function uniaxialTest(loadingRange, Δε)
     yieldStress(ϵ) = 376.9*(0.0059+ϵ)^0.152
+    # yieldStress(ϵ) = 376.9*ϵ + 100.0
     m = PlasticHill(243.0, 69000.0, 0.33, 0.84, 0.64, 1.51, yieldStress) # Swift hardening rule
     cache = get_cache(m)
     state = initial_material_state(m)
@@ -34,18 +44,28 @@ function uniaxialTest(loadingRange)
     s11_all = Float64[]
 
     for e11 in loadingRange
-        Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? loadingRange.step.hi : 0.0)
+        # Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? loadingRange.step.hi : 0.0)
         σ, ∂σ∂ε, state = material_response(m, Δε, state; cache=cache)
         push!(e11_all, e11)
         push!(s11_all, σ[1,1])
     end
-    return e11_all, s11_all
+    return e11_all, s11_all, state
 end
 
-e11_all, s11_all = uniaxialTest(range(0.0, 0.2, 2001))
+loadingRange = range(0.0, 0.2, 201)
+Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? loadingRange.step.hi : 0.0)
+
+e11_all, s11_all, state = uniaxialTest(loadingRange, Δε)
 
 using Plots
 
+p = plot(e11_all, s11_all)
+
+
+loadingRange = range(0.0, 0.2, 201)
+Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? loadingRange.step.hi : (i==2 && j==2 ? loadingRange.step.hi : 0.0))
+
+e11_all, s11_all, state = uniaxialTest(loadingRange, Δε)
 p = plot(e11_all, s11_all)
 
 
