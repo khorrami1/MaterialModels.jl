@@ -43,6 +43,9 @@ function uniaxialTest(loadingRange, Δε)
     e11_all = Float64[]
     s11_all = Float64[]
 
+    push!(e11_all, 0.0)
+    push!(s11_all, 0.0)
+
     for e11 in loadingRange
         # Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? loadingRange.step.hi : 0.0)
         σ, ∂σ∂ε, state = material_response(m, Δε, state; cache=cache)
@@ -59,10 +62,10 @@ e11_all, s11_all, state = uniaxialTest(loadingRange, Δε)
 
 using Plots
 
-p = plot(e11_all, s11_all)
+p = plot!(e11_all, s11_all)
 
 
-loadingRange = range(0.0, 0.2, 201)
+loadingRange = range(0.0, 0.2, 2001)
 Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? loadingRange.step.hi : (i==2 && j==2 ? loadingRange.step.hi : 0.0))
 
 e11_all, s11_all, state = uniaxialTest(loadingRange, Δε)
