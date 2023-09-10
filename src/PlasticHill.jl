@@ -139,7 +139,7 @@ function material_response(m::PlasticHill, dε::SymmetricTensor{2,3,T,6}, state:
         nlsolve_options = get(options, :nlsolve_params, Dict{Symbol, Any}(:method=>:newton))
         haskey(nlsolve_options, :method) || merge!(nlsolve_options, Dict{Symbol, Any}(:method=>:newton)) # set newton if the user did not supply another method
         result = NLsolve.nlsolve(nlsolve_cache, nlsolve_cache.x_f; nlsolve_options...)
-        
+        println("norm(ε) = ", string(norm(state.εᵉ+ state.εᵖ))," iterations: ", string(result.iterations))
         if result.f_converged
             x = frommandel(ResidualsPlasticHill, result.zero::Vector{T})
             dεᵖ = x.dλ*Tensors.gradient(m.yieldFunction, x.σ)
