@@ -135,10 +135,11 @@ function get_FLC(m)
     ϵ1 = Vector{Float64}[]
     ϵ2 = Vector{Float64}[]
 
-    for c in range(0.0, 1.0, 10)
+    for c in range(-2, 2, 40)
 
-        Δε = SymmetricTensor{2,3,Float64}([loadingStep, c*loadingStep, 0.0*loadingStep, c*loadingStep, 0., c*loadingStep])
-        
+        #Δε = SymmetricTensor{2,3,Float64}([loadingStep, c*loadingStep, 0.0*loadingStep, c*loadingStep, 0., c*loadingStep])
+        Δε = SymmetricTensor{2,3,Float64}([loadingStep, c*loadingStep, 0.0*loadingStep, c*loadingStep, 0.0*loadingStep, c*loadingStep])
+
         e_all, s_all, ϵ1_all, ϵ2_all, state, damageParam = LoadingTest(m, loadingRange, Δε)
         @show damageParam
         push!(ϵ1, ϵ1_all)
@@ -154,9 +155,15 @@ end
 
 ϵ1, ϵ2 = get_FLC(m)
 
-plot(ϵ2[1], ϵ1[1])
-for i in 2:10
+p = plot(ϵ2[1], ϵ1[1])
+for i in 2:40
     plot!(ϵ2[i], ϵ1[i])
     @show i
 end
 
+p
+
+e1 = [ϵ1[i][end] for i in eachindex(ϵ1)]
+e2 = [ϵ2[i][end] for i in eachindex(ϵ2)]
+
+scatter(e2, e1)
