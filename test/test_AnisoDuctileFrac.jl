@@ -138,7 +138,7 @@ function get_FLC(m)
     for c in range(-2, 2, 40)
 
         #Δε = SymmetricTensor{2,3,Float64}([loadingStep, c*loadingStep, 0.0*loadingStep, c*loadingStep, 0., c*loadingStep])
-        Δε = SymmetricTensor{2,3,Float64}([loadingStep, c*loadingStep, 0.0*loadingStep, c*loadingStep, 0.0*loadingStep, c*loadingStep])
+        Δε = SymmetricTensor{2,3,Float64}([loadingStep, c*loadingStep, c*loadingStep, c*loadingStep, c*loadingStep, c*loadingStep])
 
         e_all, s_all, ϵ1_all, ϵ2_all, state, damageParam = LoadingTest(m, loadingRange, Δε)
         @show damageParam
