@@ -47,4 +47,8 @@ function Tensors.tomandel!(v::Vector{T}, r::ResidualsGTN{T}) where T
 end
 
 function material_response(m::GTN, dε::SymmetricTensor{2,3,T,6}, state::GTNstate{T},
+    Δt=nothing; cache=get_cache(m), options=Dict{Symbol, Any}=Dict{Symbol, Any()}) where T
+
+    
+
 end
