@@ -85,7 +85,7 @@ include("LinearElastic.jl")
 include("transverselyisotropic.jl")
 include("Plastic.jl")
 include("PlasticHill.jl")
-include("GeneralPlastic.jl")
+# include("GeneralPlastic.jl")
 include("CrystalViscoPlastic/slipsystems.jl")
 include("CrystalViscoPlastic/CrystalViscoPlastic.jl")
 

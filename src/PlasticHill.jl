@@ -19,24 +19,24 @@ function (f::Yield_Hill48)(T::SymmetricTensor{2,3})
     return sqrt( (f.F*T[1,1]*T[1,1] + f.G*T[2,2]*T[2,2] + f.H*T[3,3]*T[3,3])/(f.F*f.G + f.F*f.H + f.G*f.H) + 2*T[2,3]*T[2,3]/f.L + 2*T[3,1]*T[3,1]/f.M + 2*T[1,2]*T[1,2]/f.N )
 end
 
-struct PlasticHill<:AbstractMaterial
-    UTS :: Float64 #Ultimate Tensile strength (MPa)
-    E :: Float64 #Elastic Modulus (MPa)
-    ν :: Float64 #Poinson's ration
-    R0 :: Float64
-    R45 :: Float64
-    R90 :: Float64
+struct PlasticHill{T}<:AbstractMaterial
+    UTS :: T #Ultimate Tensile strength (MPa)
+    E :: T #Elastic Modulus (MPa)
+    ν :: T #Poinson's ration
+    R0 :: T
+    R45 :: T
+    R90 :: T
     yieldStress :: Function
     yieldFunction :: Yield_Hill48
 
     # precomputed Hill coefficients
-    F :: Float64
-    G :: Float64
-    H :: Float64
-    N :: Float64
-    L :: Float64
-    M :: Float64
-    Eᵉ :: SymmetricTensor{4,3,Float64,36}
+    F :: T
+    G :: T
+    H :: T
+    N :: T
+    L :: T
+    M :: T
+    Eᵉ :: SymmetricTensor{4,3,T,36}
 
     function PlasticHill(UTS, E, ν, R0, R45, R90, yieldStress)
         F = R0/(R90*(R0+1))
@@ -47,7 +47,7 @@ struct PlasticHill<:AbstractMaterial
         M = N # must be checked!
         yieldFunction = Yield_Hill48(F, G, H, M, N, L)
         Eᵉ = elastic_tangent_3D(E, ν)
-        return new(UTS, E, ν, R0, R45, R90, yieldStress, yieldFunction, F, G, H, N, L, M, Eᵉ)
+        return new{typeof(R0)}(UTS, E, ν, R0, R45, R90, yieldStress, yieldFunction, F, G, H, N, L, M, Eᵉ)
     end
 end
 
@@ -83,7 +83,7 @@ struct ResidualsPlasticHill{T}
     dλ::T 
 end
 
-Tensors.get_base(::Type{PlasticHill}) = ResidualsPlasticHill # needed for frommandel
+Tensors.get_base(::Type{PlasticHill{T}}) where T = ResidualsPlasticHill # needed for frommandel
 
 function get_cache(m::PlasticHill)
     state = initial_material_state(m)
