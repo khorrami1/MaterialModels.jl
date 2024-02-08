@@ -7,7 +7,7 @@ using Plots; gr();
 using ProgressMeter
 
 import MaterialModels as MM
-using FerriteNeumann
+# using FerriteNeumann
 
 struct VectorRamp{dim,T}<:Function
     ramp::Vec{dim,T}
@@ -24,26 +24,26 @@ function setup_problem_definition()
     # Define material properties
     # material = J2Plasticity(;E=200.0e9, ν=0.3, σ0=200.e6, H=10.0e9)
     material = MM.PlasticHill(243.0, 69000.0, 0.33, 0.84, 0.64, 1.51, yieldStress)
-    ip =  Lagrange{3, RefTetrahedron, 1}()
+    ip =  Lagrange{RefTetrahedron, 1}()^3
     # CellValues
-    cv = CellVectorValues(QuadratureRule{3, RefTetrahedron}(2), ip, ip)
+    cv = CellValues(QuadratureRule{RefTetrahedron}(2), ip)
 
     # Grid and degrees of freedom (`Ferrite.jl`)
     grid = generate_grid(Tetrahedron, (20,2,4), zero(Vec{3}), Vec((10.,1.,1.)))
-    dh = DofHandler(grid); add!(dh, :u, 3, ip); close!(dh)
+    dh = DofHandler(grid); push!(dh, :u, ip); close!(dh)
 
     # Constraints (Dirichlet boundary conditions, `Ferrite.jl`)
     ch = ConstraintHandler(dh)
-    add!(ch, Dirichlet(:u, getfaceset(grid, "left"), Returns(zero(Vec{3})), [1,2,3]))
+    add!(ch, Dirichlet(:u, getfaceset(grid, "left"), Returns(zero(Vec{3}))))
     close!(ch)
 
     # Neumann boundary conditions
-    nh = NeumannHandler(dh)
+    lh = LoadHandler(dh)
     quad_order = 3
-    add!(nh, Neumann(:u, quad_order, getfaceset(grid, "right"), traction_function))
+    add!(lh, Neumann(:u, quad_order, getfaceset(grid, "right"), traction_function))
 
     domainspec = DomainSpec(dh, material, cv)
-    return FEDefinition(domainspec; ch, nh)
+    return FEDefinition(domainspec; ch, lh)
 end;
 
 struct PlasticityPostProcess{T}
