@@ -99,11 +99,10 @@ end
 
 
 function Tensors.tomandel!(v::Vector{T}, r::ResidualsPlasticHill{T}) where T
-    M=6
     # TODO check vector length
-    tomandel!(view(v, 1:M), r.σ)
-    v[M+1] = r.κ
-    v[M+2] = r.dλ
+    tomandel!(view(v, 1:6), r.σ)
+    v[7] = r.κ
+    v[8] = r.dλ
     return v
 end
 

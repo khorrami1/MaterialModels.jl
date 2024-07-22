@@ -45,11 +45,10 @@ function get_cache(m::GeneralPlastic)
 end
 
 function Tensors.tomandel!(v::Vector{T}, r::ResidualsGeneralPlastic{T}) where T
-    M=6
     # TODO check vector length
-    tomandel!(view(v, 1:M), r.σ)
-    v[M+1] = r.κ
-    v[M+2] = r.dλ
+    tomandel!(view(v, 1:6), r.σ)
+    v[7] = r.κ
+    v[8] = r.dλ
     return v
 end
 
@@ -89,7 +88,8 @@ function material_response(m::GeneralPlastic, dε::SymmetricTensor{2,3,T,6}, sta
         
         if result.f_converged
             x = frommandel(ResidualsGeneralPlastic, result.zero::Vector{T})
-            dεᵖ = x.dλ*Tensors.gradient(m.yieldFunction, x.σ)
+            df_dσ = Tensors.gradient(m.yieldFunction, x.σ)
+            dεᵖ = x.dλ*df_dσ
             dεᵉ = dε - dεᵖ
             εᵖ = state.εᵖ + dεᵖ
             Cep = m.Celas # it must be corrected later!
