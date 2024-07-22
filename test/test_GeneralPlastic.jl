@@ -2,7 +2,7 @@
 
 @testset begin
 
-    using Plots
+    # using Plots
 
     yieldStress(ϵ) = 376.9*(0.0059+ϵ)^0.152
     E = 69e3
@@ -59,6 +59,6 @@
     Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? loadingRange.step.hi : 0.0)
 
     e_all, s_all, state = uniaxialTest(m, loadingRange, Δε)
-    p = plot(e_all, s_all)
+    # p = plot(e_all, s_all)
 
 end
