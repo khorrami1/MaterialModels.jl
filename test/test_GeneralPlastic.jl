@@ -1,8 +1,8 @@
 
 
-@testset begin
+# @testset begin
 
-    # using Plots
+    using Plots
 
     yieldStress(ϵ) = 376.9*(0.0059+ϵ)^0.152
     E = 69e3
@@ -45,6 +45,7 @@
         state = initial_material_state(m)
         e_all = Float64[]
         s_all = Float64[]
+        ∂σ∂ε = zeros(SymmetricTensor{4,3})
 
         for e11 in loadingRange
             # Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? loadingRange.step.hi : 0.0)
@@ -52,13 +53,13 @@
             push!(e_all, e11)
             push!(s_all, σ[1,1])
         end
-        return e_all, s_all, state
+        return e_all, s_all, ∂σ∂ε ,state
     end
 
-    loadingRange = range(0.0, 0.2, 201)
+    loadingRange = range(0.0, 0.1, 201)
     Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? loadingRange.step.hi : 0.0)
 
-    e_all, s_all, state = uniaxialTest(m, loadingRange, Δε)
-    # p = plot(e_all, s_all)
+    e_all, s_all, ∂σ∂ε, state = uniaxialTest(m, loadingRange, Δε)
+    p = plot(e_all, s_all)
 
-end
+# end

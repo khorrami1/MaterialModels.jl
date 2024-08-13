@@ -141,10 +141,14 @@ function material_response(m::PlasticHill, dε::SymmetricTensor{2,3,T,6}, state:
         println("norm(ε) = ", string(norm(state.εᵉ+ state.εᵖ))," iterations: ", string(result.iterations))
         if result.f_converged
             x = frommandel(ResidualsPlasticHill, result.zero::Vector{T})
-            dεᵖ = x.dλ*Tensors.gradient(m.yieldFunction, x.σ)
+            ∂f∂σ = Tensors.gradient(m.yieldFunction, x.σ)
+            dεᵖ = x.dλ * ∂f∂σ
             dεᵉ = dε - dεᵖ
             εᵖ = state.εᵖ + dεᵖ
-            Cep = m.Eᵉ # it must be corrected later!
+            C_f_σ = m.Celas ⊡ ∂f∂σ
+            f_σ_C = ∂f∂σ ⊡ m.Celas
+            H = Tensors.gradient(m.yieldStress, state.κ)
+            Cep = m.Celas - (C_f_σ ⊗ f_σ_C)/(H + ∂f∂σ ⊡ C_f_σ) # it must be corrected later!
             return x.σ, Cep, PlasticHillState(εᵖ, state.εᵉ+dεᵉ, x.σ, x.κ)
         else
             error("Material model not converged. Could not find material state.")

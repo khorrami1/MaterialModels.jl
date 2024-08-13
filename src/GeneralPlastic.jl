@@ -84,15 +84,18 @@ function material_response(m::GeneralPlastic, dε::SymmetricTensor{2,3,T,6}, sta
         nlsolve_options = get(options, :nlsolve_params, Dict{Symbol, Any}(:method=>:newton))
         haskey(nlsolve_options, :method) || merge!(nlsolve_options, Dict{Symbol, Any}(:method=>:newton)) # set newton if the user did not supply another method
         result = NLsolve.nlsolve(nlsolve_cache, nlsolve_cache.x_f; nlsolve_options...)
-        println("norm(ε) = ", string(norm(state.εᵉ+ state.εᵖ))," iterations: ", string(result.iterations))
+        # println("norm(ε) = ", string(norm(state.εᵉ+ state.εᵖ))," iterations: ", string(result.iterations))
         
         if result.f_converged
             x = frommandel(ResidualsGeneralPlastic, result.zero::Vector{T})
-            df_dσ = Tensors.gradient(m.yieldFunction, x.σ)
-            dεᵖ = x.dλ*df_dσ
+            ∂f∂σ = Tensors.gradient(m.yieldFunction, x.σ)
+            dεᵖ = x.dλ * ∂f∂σ
             dεᵉ = dε - dεᵖ
             εᵖ = state.εᵖ + dεᵖ
-            Cep = m.Celas # it must be corrected later!
+            C_f_σ = m.Celas ⊡ ∂f∂σ
+            f_σ_C = ∂f∂σ ⊡ m.Celas
+            H = Tensors.gradient(m.yieldStress, state.κ)
+            Cep = m.Celas - (C_f_σ ⊗ f_σ_C)/(H + ∂f∂σ ⊡ C_f_σ) # it must be corrected later!
             return x.σ, Cep, GeneralPlasticState(εᵖ, state.εᵉ+dεᵉ, x.σ, x.κ)
         else
             error("Material model not converged. Could not find material state.")
@@ -104,12 +107,17 @@ end
 
 function residuals(vars::ResidualsGeneralPlastic, m::GeneralPlastic, state::GeneralPlasticState, dε)
 
-    df_dσ = Tensors.gradient(m.yieldFunction, vars.σ)
-    dεᵖ = vars.dλ * df_dσ 
+    ∂f∂σ = Tensors.gradient(m.yieldFunction, vars.σ)
+    dεᵖ = vars.dλ * ∂f∂σ 
     # εᵖ = state.εᵖ + dεᵖ
     Rσ = vars.σ - state.σ + m.Celas ⊡ (dεᵖ - dε)
+    # C_f_σ = m.Celas ⊡ ∂f∂σ
+    # f_σ_C = ∂f∂σ ⊡ m.Celas
+    # H = Tensors.gradient(m.yieldStress, state.κ)
+    # Cep = m.Celas - (C_f_σ ⊗ f_σ_C)/(H + ∂f∂σ ⊡ C_f_σ)
+    # Rσ = vars.σ - state.σ - Cep ⊡ dε
     Rκ = vars.κ - state.κ - vars.dλ
-    # εᵖ_equi = get_equivalent_Hill(εᵖ, m)
+    # εᵖ_equi = get_equivalent_Hill(εᵖ, m)]
     RΦ = m.yieldFunction(vars.σ) - m.yieldStress(vars.κ)
 
     return ResidualsGeneralPlastic(Rσ, Rκ, RΦ)
