@@ -91,11 +91,11 @@ function LoadingTest(m, loadingRange, Δε)
 
     for count in eachindex(loadingRange)
         # Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? loadingRange.step.hi : 0.0)
-        κ_old = state.κ
+        λ_old = state.λ
         σ, ∂σ∂ε, state = material_response(m, Δε, state; cache=cache)
-        κ_new = state.κ
+        λ_new = state.λ
         η, L, t = get_η_L_t(state.σ)
-        push!(damageParam, damageParam[count] + tem_damage(η, L, t) * (κ_new - κ_old))
+        push!(damageParam, damageParam[count] + tem_damage(η, L, t) * (λ_new - λ_old))
         push!(e_all, state.εᵉ + state.εᵖ )
         push!(s_all, σ)
 

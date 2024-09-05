@@ -175,9 +175,9 @@ function solve()
     L = 10.0 # beam length [m]
     w = 1.0  # beam width [m]
     h = 1.0  # beam height[m]
-    n_timesteps = 40
+    n_timesteps = 20
     u_max = zeros(n_timesteps)
-    traction_magnitude = 1.e1 * range(0.5, 1.0, length=n_timesteps)
+    traction_magnitude = 1.e1 * range(0.0, 1.0, length=n_timesteps)
 
     ## Create geometry, dofs and boundary conditions
     n = 2
@@ -209,7 +209,7 @@ function solve()
     cache = get_cache(material)
 
     ## Newton-Raphson loop
-    NEWTON_TOL = 1e-1 # 1 N
+    NEWTON_TOL = 1e-2 # 1 N
     print("\n Starting Netwon iterations:\n")
 
     for timestep in 1:n_timesteps
@@ -258,24 +258,24 @@ function solve()
         ##
         ## The following is a quick (and dirty) way of extracting average cell data for export.
         mises_values = zeros(getncells(grid))
-        κ_values = zeros(getncells(grid))
+        λ_values = zeros(getncells(grid))
         ϵp = zeros(SymmetricTensor{2,3}, getncells(grid))
         for (el, cell_states) in enumerate(eachcol(states))
             for state in cell_states
                 mises_values[el] += vonMises(state.σ)
-                κ_values[el] += state.κ
+                λ_values[el] += state.λ
                 ϵp[el] += state.εᵖ
             end
             mises_values[el] /= length(cell_states) # average von Mises stress
-            κ_values[el] /= length(cell_states)     # average drag stress
+            λ_values[el] /= length(cell_states)     # average drag stress
             ϵp[el] /= length(cell_states)
         end
         EquiEp = [vonMises(ϵp[el]) for el in 1:getncells(grid)]
         VTKGridFile("test/Results/plasticity-"*string(timestep), dh) do vtk
             write_solution(vtk, dh, u_new) # displacement field
             write_cell_data(vtk, mises_values, "von Mises [MPa]")
-            write_cell_data(vtk, κ_values, "Drag stress [MPa]")
-            write_cell_data(vtk, EquiEp, "EquiEp")
+            write_cell_data(vtk, λ_values, "Equi_plastic")
+            write_cell_data(vtk, EquiEp, "Vm_Ep")
         end
 
     end
@@ -295,7 +295,7 @@ plot(
     linewidth=2,
     title="Traction-displacement",
     label=nothing,
-    markershape=:auto
+    markershape=:circle
     )
 ylabel!("Traction [MPa]")
 xlabel!("Maximum deflection [m]")

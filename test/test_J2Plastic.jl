@@ -1,5 +1,5 @@
 
-@testset begin
+# @testset begin
 
     # using Plots
 
@@ -32,13 +32,13 @@
     e11_all, s11_all, state = uniaxialTest(loadingRange, Δε)
 
 
-    # p = plot(e11_all, s11_all)
+    p = plot(e11_all, s11_all)
 
 
     loadingRange = range(0.0, 0.002, 201)
     Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? loadingRange.step.hi : (i==2 && j==2 ? loadingRange.step.hi : 0.0))
 
     e11_all, s11_all, state = uniaxialTest(loadingRange, Δε)
-    # p = plot(e11_all, s11_all)
+    p = plot(e11_all, s11_all)
 
-end
+# end

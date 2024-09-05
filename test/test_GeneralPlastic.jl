@@ -1,8 +1,8 @@
 
 
-# @testset begin
+@testset begin
 
-    using Plots
+    # using Plots
 
     yieldStress(ϵ) = 376.9*(0.0059+ϵ)^0.152
     E = 69e3
@@ -40,26 +40,35 @@
     m = GeneralPlastic(Celas, yieldStress, yieldFunction1)
 
 
-    function uniaxialTest(m, loadingRange, Δε)
+    function uniaxialTest(m, loadingRange, Δε; num_cycles=1)
         cache = get_cache(m)
         state = initial_material_state(m)
-        e_all = Float64[]
-        s_all = Float64[]
+        e_all = [0.0]
+        s_all = [0.0]
         ∂σ∂ε = zeros(SymmetricTensor{4,3})
 
-        for e11 in loadingRange
-            # Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? loadingRange.step.hi : 0.0)
-            σ, ∂σ∂ε, state = material_response(m, Δε, state; cache=cache)
-            push!(e_all, e11)
-            push!(s_all, σ[1,1])
+        for cycle in 1:num_cycles
+            for e11 in loadingRange
+                # Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? loadingRange.step.hi : 0.0)
+                σ, ∂σ∂ε, state = material_response(m, Δε, state; cache=cache)
+                push!(e_all, e11)
+                push!(s_all, σ[1,1])
+            end
+            for e11 in reverse(loadingRange)
+                # Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? loadingRange.step.hi : 0.0)
+                σ, ∂σ∂ε, state = material_response(m, -Δε, state; cache=cache)
+                push!(e_all, e11)
+                push!(s_all, σ[1,1])
+            end
         end
+
         return e_all, s_all, ∂σ∂ε ,state
     end
 
     loadingRange = range(0.0, 0.1, 201)
     Δε = SymmetricTensor{2,3,Float64}((i,j) -> i==1 && j==1 ? loadingRange.step.hi : 0.0)
 
-    e_all, s_all, ∂σ∂ε, state = uniaxialTest(m, loadingRange, Δε)
-    p = plot(e_all, s_all)
+    e_all, s_all, ∂σ∂ε, state = uniaxialTest(m, loadingRange, Δε, num_cycles=4)
+    # p = plot(e_all, s_all, xminorgrid=:on, yminorgrid=:on)
 
-# end
+end

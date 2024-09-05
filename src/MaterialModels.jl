@@ -85,7 +85,6 @@ include("LinearElastic.jl")
 include("transverselyisotropic.jl")
 include("Plastic.jl")
 include("J2Plasticity.jl")
-include("PlasticHill.jl")
 include("GeneralPlastic.jl")
 include("CrystalViscoPlastic/slipsystems.jl")
 include("CrystalViscoPlastic/CrystalViscoPlastic.jl")
@@ -120,7 +119,6 @@ export solve
 
 export Plastic, PlasticState
 export J2Plasticity, J2PlasticityState
-export PlasticHill, PlasticHillState
 export GeneralPlastic, GeneralPlasticState
 
 end
