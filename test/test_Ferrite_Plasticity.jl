@@ -36,8 +36,10 @@ function create_bc(dh, grid)
     dbcs = ConstraintHandler(dh)
     ## Clamped on the left side
     dofs = [1, 2, 3]
-    dbc = Dirichlet(:u, getfacetset(grid, "left"), (x,t) -> [0.0, 0.0, 0.0], dofs)
-    add!(dbcs, dbc)
+    dbc1 = Dirichlet(:u, getfacetset(grid, "left"), (x,t) -> [0.0, 0.0, 0.0], dofs)
+    # dbc2 = Dirichlet(:u, getfacetset(grid, "right"), (x,t) -> [0.0, 0.0, -t*1.5/20.0], dofs)
+    add!(dbcs, dbc1)
+    # add!(dbcs, dbc2)
     close!(dbcs)
     return dbcs
 end;
@@ -49,7 +51,7 @@ end;
 # * Tangent stiffness `K`
 function doassemble!(K::SparseMatrixCSC, r::Vector, cellvalues::CellValues, dh::DofHandler,
                      material, Δu, states, states_old, cache)
-    assembler = start_assemble(K, r)
+    assembler = start_assemble(K, r) # fillzero = true ok
     nu = getnbasefunctions(cellvalues)
     re = zeros(nu)     # element residual vector
     ke = zeros(nu, nu) # element tangent matrix
@@ -62,7 +64,7 @@ function doassemble!(K::SparseMatrixCSC, r::Vector, cellvalues::CellValues, dh::
         state = @view states[:, i]
         state_old = @view states_old[:, i]
         assemble_cell!(ke, re, cell, cellvalues, material, Δue, state, state_old, cache)
-        assemble!(assembler, eldofs, re, ke)
+        assemble!(assembler, eldofs, ke, re)
     end
     return K, r
 end
@@ -145,6 +147,7 @@ end
 
 # Define a function which solves the FE-problem.
 function solve()
+
     ## Define material parameters
     # E = 200.0e9 # [Pa]
     # H = E/20   # [Pa]
@@ -152,7 +155,7 @@ function solve()
     # σ₀ = 200e6  # [Pa]
     # material = J2Plasticity(E, ν, σ₀, H)
 
-    E = 69e3
+    E = 69.0e3 # [MPa]
     ν = 0.3
     Celas = elastic_tangent_3D(E, ν)
 
@@ -168,9 +171,9 @@ function solve()
     M = N # must be checked!
 
     yield_Hill48 = Yield_Hill48(F, G, H, M, N, L)
-    yieldFunction1(T::SymmetricTensor{2,3}) = yield_Hill48(T)
+    yieldFunction(T::SymmetricTensor{2,3}) = yield_Hill48(T)
 
-    material = GeneralPlastic(Celas, yieldStress, yieldFunction1)
+    material = GeneralPlastic(Celas, yieldStress, yieldFunction)
 
     L = 10.0 # beam length [m]
     w = 1.0  # beam width [m]
@@ -178,6 +181,9 @@ function solve()
     n_timesteps = 20
     u_max = zeros(n_timesteps)
     traction_magnitude = 1.e1 * range(0.0, 1.0, length=n_timesteps)
+
+    # for unloading the system
+    # traction_magnitude = push!(collect(traction_magnitude), 0.)
 
     ## Create geometry, dofs and boundary conditions
     n = 2
@@ -213,14 +219,15 @@ function solve()
     print("\n Starting Netwon iterations:\n")
 
     for timestep in 1:n_timesteps
+
         t = timestep # actual time (used for evaluating d-bndc)
         traction = Vec((0.0, 0.0, traction_magnitude[timestep]))
         newton_itr = -1
         print("\n Time step @time = $timestep:\n")
         update!(dbcs, t) # evaluates the D-bndc at time t
-        apply!(u_new, dbcs)  # set the prescribed values in the solution vector
+        apply!(Δu, dbcs)  # set the prescribed values in the solution vector
         # Δu = zeros(n_dofs)
-        Δu .= u_new - u_old
+        # Δu .= u_new - u_old
         while true; newton_itr += 1
 
             if newton_itr > 100
@@ -245,7 +252,7 @@ function solve()
         end
 
         u_new .= u_old + Δu
-
+        
         u_old .= u_new
         
         ## Update the old states with the converged values for next timestep
@@ -260,6 +267,7 @@ function solve()
         mises_values = zeros(getncells(grid))
         λ_values = zeros(getncells(grid))
         ϵp = zeros(SymmetricTensor{2,3}, getncells(grid))
+
         for (el, cell_states) in enumerate(eachcol(states))
             for state in cell_states
                 mises_values[el] += vonMises(state.σ)
@@ -270,6 +278,7 @@ function solve()
             λ_values[el] /= length(cell_states)     # average drag stress
             ϵp[el] /= length(cell_states)
         end
+
         EquiEp = [vonMises(ϵp[el]) for el in 1:getncells(grid)]
         VTKGridFile("test/Results/plasticity-"*string(timestep), dh) do vtk
             write_solution(vtk, dh, u_new) # displacement field

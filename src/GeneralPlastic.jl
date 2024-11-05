@@ -16,7 +16,7 @@ struct GeneralPlasticState{T} <: AbstractMaterialState
     εᵉ::SymmetricTensor{2,3,T} # total elastic strain
     σ :: SymmetricTensor{2,3,T} # Cauchy stress
     # κ :: T # if associative follow rule, stress-like plastic internal variable 
-    λ :: T # the effective plastic strain
+    λ :: T # the equivalent plastic strain
 end
 
 # It should be generalized for any dim1, dim2, T, and M
@@ -80,6 +80,7 @@ function material_response(m::GeneralPlastic, dε::SymmetricTensor{2,3,T,6}, sta
         update_cache!(nlsolve_cache, f)
         # initial guess
         x0 = ResidualsGeneralPlastic(state.σ, state.λ)
+        # x0 = ResidualsGeneralPlastic(σ_trial, state.λ)
         # convert initial guess to vector
         tomandel!(nlsolve_cache.x_f, x0)
         # solve for variables x
