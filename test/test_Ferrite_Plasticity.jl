@@ -85,8 +85,8 @@ function assemble_cell!(Ke, re, cell, cellvalues, material,
         # Δϵ = ϵ - state_old[q_point].εᵖ - state_old[q_point].εᵉ
         # σ, D, state[q_point] = compute_stress_tangent(ϵ, material, state_old[q_point])
         σ, D, state[q_point] = material_response(material, Δϵ, state_old[q_point]; cache=cache)
-
         dΩ = getdetJdV(cellvalues, q_point)
+
         for i in 1:n_basefuncs
           ∂Ni = shape_symmetric_gradient(cellvalues, q_point, i)
             re[i] += (∂Ni ⊡ σ) * dΩ # add internal force to residual
@@ -179,11 +179,14 @@ function solve()
     w = 1.0  # beam width [m]
     h = 1.0  # beam height[m]
     n_timesteps = 20
-    u_max = zeros(n_timesteps)
     traction_magnitude = 1.e1 * range(0.0, 1.0, length=n_timesteps)
 
     # for unloading the system
-    # traction_magnitude = push!(collect(traction_magnitude), 0.)
+    traction_magnitude = [collect(traction_magnitude); collect(reverse(traction_magnitude))]
+   
+    n_timesteps = length(traction_magnitude)
+
+    u_max = zeros(n_timesteps)
 
     ## Create geometry, dofs and boundary conditions
     n = 2

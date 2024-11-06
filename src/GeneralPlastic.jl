@@ -71,7 +71,7 @@ function material_response(m::GeneralPlastic, dε::SymmetricTensor{2,3,T,6}, sta
     # εᵖ_equi = get_equivalent_Hill(state.εᵖ, m)
     Φ = m.yieldFunction(σ_trial) - m.yieldStress(state.λ)
 
-    if Φ < 0
+    if Φ <= 0
         return σ_trial, m.Celas, GeneralPlasticState(state.εᵖ, state.εᵉ+dε, σ_trial, state.λ)
     else
         # set the current residual function that depends only on the variables
@@ -79,8 +79,8 @@ function material_response(m::GeneralPlastic, dε::SymmetricTensor{2,3,T,6}, sta
         f(r_vector, x_vector) = vector_residual!(((x)->residuals(x,m,state,dε)), r_vector, x_vector, m)
         update_cache!(nlsolve_cache, f)
         # initial guess
-        x0 = ResidualsGeneralPlastic(state.σ, state.λ)
-        # x0 = ResidualsGeneralPlastic(σ_trial, state.λ)
+        # x0 = ResidualsGeneralPlastic(state.σ, state.λ)
+        x0 = ResidualsGeneralPlastic(σ_trial, state.λ)
         # convert initial guess to vector
         tomandel!(nlsolve_cache.x_f, x0)
         # solve for variables x
