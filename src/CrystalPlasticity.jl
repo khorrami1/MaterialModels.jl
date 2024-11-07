@@ -1,101 +1,157 @@
+# using LinearAlgebra
+# using Tensors
+# using NLsolve
+# using Test
 
-slipsystems = MaterialModels.slipsystems(MaterialModels.FCC(), rand(RodriguesParam))
+# Define Slip System
+struct SlipSystem{T}
+    n::Vector{T}  # Normal to the slip plane
+    s::Vector{T}  # Slip direction
+    tau_c0::T     # Initial critical resolved shear stress
+    H::T          # Hardening modulus
+end
 
-
+# Define Crystal Plasticity material
 struct CrystalPlasticity{T} <: AbstractMaterial
+    Celas :: SymmetricTensor{4, 3, T, 36}
+    slipsystems :: Vector{SlipSystem{T}}
 end
 
+# Define State
 struct CrystalPlasticityState{T} <: AbstractMaterialState
+    εᵖ::SymmetricTensor{2, 3, T} # total plastic strain
+    εᵉ::SymmetricTensor{2, 3, T} # total elastic strain
+    σ :: SymmetricTensor{2, 3, T} # Cauchy stress
+    γ :: Vector{T} # slip system shear strains
 end
 
-initial_material_state(::CrystalPlasticity)
+# Initialize material state
+initial_material_state(m::CrystalPlasticity) = CrystalPlasticityState(zero(SymmetricTensor{2, 3}), 
+    zero(SymmetricTensor{2, 3}), zero(SymmetricTensor{2, 3}), zeros(length(m.slipsystems)))
 
+# Cache for NLsolve
 struct CrystalPlasticityCache{T<:NLsolve.OnceDifferentiable} <: AbstractCache
     nlsolve_cache::T
 end
 
-get_n_scalar_equations(::CrystalPlasticity)
+# Number of scalar equations
+get_n_scalar_equations(m::CrystalPlasticity) = 6 + length(m.slipsystems)
 
-struct ResidualCrystalPlasticity{T}
+# Residuals
+struct ResidualsCrystalPlasticity{T}
+    σ::SymmetricTensor{2, 3, T, 6}
+    γ_dot::Vector{T}
 end
 
-Tensors.get_base(::Type{CrystalPlasticity{T}}) where T = ResidualCrystalPlasticity
+# Required functions
+Tensors.get_base(::Type{CrystalPlasticity{T}}) where T = ResidualsCrystalPlasticity
 
 function get_cache(m::CrystalPlasticity)
     state = initial_material_state(m)
-    f(r_vector, x_vector) = vector_residual!(((x)->MaterialModels.residuals(x, m, state, zero(SymmetricTensor{2,3}))), r_vector, x_vector, m)
+    f(r_vector, x_vector) = vector_residual!(((x)->MaterialModels.residuals(x, m, state, zero(SymmetricTensor{2, 3}))), r_vector, x_vector, m)
     v_cache = Vector{Float64}(undef, get_n_scalar_equations(m))
     cache = NLsolve.OnceDifferentiable(f, v_cache, v_cache; autodiff = :forward)
     return CrystalPlasticityCache(cache)
 end
 
-function Tensors.tomandel!(v::Vector{T}, r::ResidualCrystalPlasticity{T}) where T
-    # M=6
-    # # TODO check vector length
-    # tomandel!(view(v, 1:M), r.σ)
-    # v[M+1] = r.κ
-    # v[M+2] = r.dλ
+function Tensors.tomandel!(v::Vector{T}, r::ResidualsCrystalPlasticity{T}) where T
+    tomandel!(view(v, 1:6), r.σ)
+    v[7:end] = r.γ_dot
     return v
 end
 
-function Tensors.frommandel(::Type{ResidualCrystalPlasticity}, v::Vector{T}) where T
-    # σ = frommandel(SymmetricTensor{2,3}, view(v, 1:6))
-    # κ = v[7]
-    # dλ = v[8]
-    return ResidualCrystalPlasticity{T}(σ, κ, dλ)
+function Tensors.frommandel(::Type{ResidualsCrystalPlasticity}, v::Vector{T}) where T
+    σ = frommandel(SymmetricTensor{2, 3}, view(v, 1:6))
+    γ_dot = v[7:end]
+    return ResidualsCrystalPlasticity{T}(σ, γ_dot)
 end
 
-# function material_response(m::GeneralPlastic, dε::SymmetricTensor{2,3,T,6}, state::GeneralPlasticState{T},
-#     Δt=nothing; cache=get_cache(m), options::Dict{Symbol, Any} = Dict{Symbol, Any}()) where T
+function material_response(m::CrystalPlasticity, dε::SymmetricTensor{2, 3, T, 6}, state::CrystalPlasticityState{T},
+    Δt=nothing; cache=nothing, options::Dict{Symbol, Any} = Dict{Symbol, Any}()) where T
 
-#     nlsolve_cache = cache.nlsolve_cache
+    nlsolve_cache = cache.nlsolve_cache
 
-#     σ_trial = state.σ + m.Celas ⊡ dε
+    σ_trial = state.σ + m.Celas ⊡ dε
+    Φ = maximum([abs(resolved_shear_stress(slip_system, σ_trial)) - slip_system.tau_c0 for slip_system in m.slipsystems])
 
-#     # εᵖ_equi = get_equivalent_Hill(state.εᵖ, m)
-#     Φ = m.yieldFunction(σ_trial) - m.yieldStress(state.κ)
+    if Φ <= 0
+        return σ_trial, m.Celas, CrystalPlasticityState(state.εᵖ, state.εᵉ+dε, σ_trial, state.γ)
+    else
+        f(r_vector, x_vector) = vector_residual!(((x)->residuals(x, m, state, dε)), r_vector, x_vector, m)
+        update_cache!(nlsolve_cache, f)
+        x0 = ResidualsCrystalPlasticity(σ_trial, zeros(length(m.slipsystems)))
+        tomandel!(nlsolve_cache.x_f, x0)
+        nlsolve_options = get(options, :nlsolve_params, Dict{Symbol, Any}(:method=>:newton))
+        result = NLsolve.nlsolve(nlsolve_cache, nlsolve_cache.x_f; nlsolve_options...)
 
-#     if Φ <= 0
-#         return σ_trial, m.Celas, GeneralPlasticState(state.εᵖ, state.εᵉ+dε, σ_trial, state.κ)
-#     else
-#         # set the current residual function that depends only on the variables
-#         # nlsolve_cache.f = (r_vector, x_vector) -> vector_residual!(((x)->residuals(x,m,state,Δε)), r_vector, x_vector, m)
-#         f(r_vector, x_vector) = vector_residual!(((x)->residuals(x,m,state,dε)), r_vector, x_vector, m)
-#         update_cache!(nlsolve_cache, f)
-#         # initial guess
-#         x0 = ResidualsGeneralPlastic(σ_trial, state.κ, 0.0)
-#         # convert initial guess to vector
-#         tomandel!(nlsolve_cache.x_f, x0)
-#         # solve for variables x
-#         nlsolve_options = get(options, :nlsolve_params, Dict{Symbol, Any}(:method=>:newton))
-#         haskey(nlsolve_options, :method) || merge!(nlsolve_options, Dict{Symbol, Any}(:method=>:newton)) # set newton if the user did not supply another method
-#         result = NLsolve.nlsolve(nlsolve_cache, nlsolve_cache.x_f; nlsolve_options...)
-#         println("norm(ε) = ", string(norm(state.εᵉ+ state.εᵖ))," iterations: ", string(result.iterations))
-        
-#         if result.f_converged
-#             x = frommandel(ResidualsGeneralPlastic, result.zero::Vector{T})
-#             dεᵖ = x.dλ*Tensors.gradient(m.yieldFunction, x.σ)
-#             dεᵉ = dε - dεᵖ
-#             εᵖ = state.εᵖ + dεᵖ
-#             Cep = m.Celas # it must be corrected later!
-#             return x.σ, Cep, GeneralPlasticState(εᵖ, state.εᵉ+dεᵉ, x.σ, x.κ)
-#         else
-#             error("Material model not converged. Could not find material state.")
-#         end
+        if result.f_converged
+            x = frommandel(ResidualsCrystalPlasticity, result.zero::Vector{T})
+            ∂f∂σ = [Tensors.gradient((σ)->resolved_shear_stress(slip_system, σ), x.σ) for slip_system in m.slipsystems]
+            dεᵖ = sum([x.γ_dot[i] * ∂f∂σ[i] for i in 1:length(∂f∂σ)])
+            dεᵉ = dε - dεᵖ
+            εᵖ = state.εᵖ + dεᵖ
+            Cep = m.Celas # This should be corrected based on the specific slip systems
+            return x.σ, Cep, CrystalPlasticityState(εᵖ, state.εᵉ+dεᵉ, x.σ, state.γ + x.γ_dot)
+        else
+            error("Material model not converged. Could not find material state.")
+        end
 
-#     end
+    end
 
-# end
+end
 
-# function residuals(vars::ResidualsGeneralPlastic, m::GeneralPlastic, state::GeneralPlasticState, dε)
+function residuals(vars::ResidualsCrystalPlasticity, m::CrystalPlasticity, state::CrystalPlasticityState, dε)
 
-#     df_dσ = Tensors.gradient(m.yieldFunction, vars.σ)
-#     dεᵖ = vars.dλ * df_dσ 
-#     # εᵖ = state.εᵖ + dεᵖ
-#     Rσ = vars.σ - state.σ + m.Celas ⊡ (dεᵖ - dε)
-#     Rκ = vars.κ - state.κ - vars.dλ
-#     # εᵖ_equi = get_equivalent_Hill(εᵖ, m)
-#     RΦ = m.yieldFunction(vars.σ) - m.yieldStress(vars.κ)
+    dεᵖ = sum([vars.γ_dot[i] * Tensors.gradient((σ)->resolved_shear_stress(slip_system, σ), vars.σ) for i in 1:length(vars.γ_dot)])
+    Rσ = vars.σ - state.σ + m.Celas ⊡ (dεᵖ - dε)
+    Rγ = [vars.γ_dot[i] - resolved_shear_stress(m.slipsystems[i], vars.σ) for i in 1:length(vars.γ_dot)]
 
-#     return ResidualsGeneralPlastic(Rσ, Rκ, RΦ)
+    return ResidualsCrystalPlasticity(Rσ, Rγ)
+end
+
+# Helper functions
+function resolved_shear_stress(slip_system::SlipSystem, σ::SymmetricTensor{2, 3})
+    return dot(slip_system.s, σ * slip_system.n)
+end
+
+# Example uniaxial test
+# @testset begin
+    using Plots
+
+    E = 69e3
+    ν = 0.3
+    Celas = elastic_tangent_3D(E, ν)
+
+    slip_systems = [SlipSystem([1., 0., 0.], [0., 1., 0.], 5000.0, 1000.0), 
+                    SlipSystem([0., 1., 0.], [1., 0., 0.], 5000.0, 1000.0)]
+    m = CrystalPlasticity(Celas, slip_systems)
+
+    function uniaxialTest(m, loadingRange, Δε; num_cycles=1)
+        cache = get_cache(m)
+        state = initial_material_state(m)
+        e_all = [0.0]
+        s_all = [0.0]
+        ∂σ∂ε = zeros(SymmetricTensor{4, 3})
+
+        for cycle in 1:num_cycles
+            for e11 in loadingRange
+                σ, ∂σ∂ε, state = material_response(m, Δε, state; cache=cache)
+                push!(e_all, e11)
+                push!(s_all, σ[1, 1])
+            end
+            for e11 in reverse(loadingRange)
+                σ, ∂σ∂ε, state = material_response(m, -Δε, state; cache=cache)
+                push!(e_all, e11)
+                push!(s_all, σ[1, 1])
+            end
+        end
+
+        return e_all, s_all, ∂σ∂ε, state
+    end
+
+    loadingRange = range(0.0, 0.1, 201)
+    Δε = SymmetricTensor{2, 3, Float64}((i, j) -> i == 1 && j == 1 ? loadingRange.step.hi : 0.0)
+
+    e_all, s_all, ∂σ∂ε, state = uniaxialTest(m, loadingRange, Δε, num_cycles=4)
+    p = plot(e_all, s_all, xminorgrid=:on, yminorgrid=:on)
 # end

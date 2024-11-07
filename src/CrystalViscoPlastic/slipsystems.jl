@@ -2,6 +2,7 @@ abstract type AtomicStructure end
 
 struct BCC <: AtomicStructure end
 struct FCC <: AtomicStructure end
+struct HCP <: AtomicStructure end
 
 # TODO: introduce type Slipsystem instead of using NTuple
 
@@ -31,6 +32,20 @@ function _get_slipsystems(::BCC)
                         ([ 1., 1., 1.], [ 1.,-1., 1.]);
                         ([ 1., 1.,-1.], [-1., 1.,-1.]);
                         ([-1., 1., 1.], [ 1., 1., 1.]) ]
+    return slip_planes, slip_directions
+end
+
+function _get_slipsystems(::HCP)
+    slip_planes = [ [0., 0., 1.],      # Basal plane (0001)
+                    [1., 0., -1.],    # Prismatic planes {10-10}
+                    [1., -1., 0.],    # Prismatic planes {10-10}
+                    [1., 1., 0.]]      # Pyramidal planes {10-11}
+
+    slip_directions = [ ([1., 1., 0.], [2., -1., 1.], [-1., 2., 1.]),
+                        ([1., 0., 0.], [0., 1., 0.], [1., 1., 0.]),
+                        ([1., -1., 0.], [2., -1., 1.], [1., 0., -1.]),
+                        ([1., 0., 0.], [0., 1., -1.], [1., 1., 1.]) ]
+
     return slip_planes, slip_directions
 end
 

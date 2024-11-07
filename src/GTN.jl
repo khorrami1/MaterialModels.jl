@@ -1,4 +1,7 @@
+# Reference: Ted_Belytschko Book, Eq. 12.9.4
 
+# Gurson-type yield surface
+# ϕ = (σ0_eff/σ_y)^2 + 2*q01*f0*cosh(3*q02*p1/(2*σ_y)) - (1+q03*f0^2) = 0
 
 struct GTN{T} <: AbstractMaterial
     Celas :: SymmetricTensor{4, 3, T, 36}
